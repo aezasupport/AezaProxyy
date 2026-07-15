@@ -1,3 +1,34 @@
+import subprocess
+import sys
+
+def install_dependencies():
+    """Устанавливает зависимости если их нет"""
+    try:
+        import aiosqlite
+        import aiohttp
+        import aiogram
+        print("✅ Все модули установлены")
+    except ImportError:
+        print("📦 Устанавливаем зависимости...")
+        subprocess.check_call([
+            sys.executable, 
+            "-m", 
+            "pip", 
+            "install", 
+            "aiogram>=3.0.0",
+            "aiosqlite>=0.19.0",
+            "aiohttp>=3.8.0"
+        ])
+
+# Устанавливаем перед импортами
+install_dependencies()
+
+# Теперь импорты
+import asyncio
+import logging
+import aiohttp
+import aiosqlite
+# ... остальные импорты
 import os
 import json
 import asyncio
