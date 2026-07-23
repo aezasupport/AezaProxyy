@@ -105,8 +105,7 @@ def save_config(config):
         logging.info(f"✅ Конфиг сохранен в {CONFIG_FILE}")
     except Exception as e:
         logging.error(f"❌ Ошибка сохранения конфига: {e}")
-        # Альтернатива: сохраняем в базу данных
-        raise
+        logging.warning("⚠️ Файловая система только для чтения, настройки не сохранятся")
 
 def get_config():
     return load_config()
