@@ -34,9 +34,9 @@ from datetime import datetime, timedelta
 
 # ================= КОНФИГУРАЦИЯ ИЗ ПЕРЕМЕННЫХ ОКРУЖЕНИЯ =================
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-WG_PANEL_URL = os.getenv("WG_PANEL_URL", "http://89.222.104.215:51821")
-WG_PASSWORD = os.getenv("WG_PASSWORD", "admin1223")
-ADMIN_ID = int(os.getenv("ADMIN_ID", 875318224165))
+WG_PANEL_URL = os.getenv("WG_PANEL_URL", "http://89.208.104.215:51821")
+WG_PASSWORD = os.getenv("WG_PASSWORD", "admin123")
+ADMIN_ID = int(os.getenv("ADMIN_ID", 8753184165))
 CONFIG_FILE = "bot_config.json"
 
 DEFAULT_CONFIG = {
@@ -99,8 +99,14 @@ def load_config():
     return DEFAULT_CONFIG.copy()
 
 def save_config(config):
-    with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
-        json.dump(config, f, ensure_ascii=False, indent=4)
+    try:
+        with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
+            json.dump(config, f, ensure_ascii=False, indent=4)
+        logging.info(f"✅ Конфиг сохранен в {CONFIG_FILE}")
+    except Exception as e:
+        logging.error(f"❌ Ошибка сохранения конфига: {e}")
+        # Альтернатива: сохраняем в базу данных
+        raise
 
 def get_config():
     return load_config()
