@@ -1,0 +1,32 @@
+{
+    "tariffs": {
+        "1_month": {
+            "name": "1 месяц",
+            "stars": 30,
+            "days": 30
+        },
+        "3_months": {
+            "name": "3 месяца",
+            "stars": 400,
+            "days": 90
+        },
+        "6_months": {
+            "name": "6 месяцев",
+            "stars": 700,
+            "days": 180
+        }
+    },
+    "welcome_text": "Привет, {name}! 👋\nЯ бот для продажи надежных VPN-конфигураций WireGuard.",
+    "purchase_success_text": "✅ <b>Оплата прошла успешно!</b>\n\n🎉 Тариф '{tariff_name}' активирован\nДействует до: {expiry_date}\n\n📥 Скачайте конфигурацию ниже",
+    "help_text": "📖 Как пользоваться:\n\n1. Выберите тариф в разделе 'Купить подписку'\n2. Оплатите звездами Telegram\n3. Скачайте файл конфигурации\n4. Установите приложение WireGuard\n5. Импортируйте файл в приложение\n6. Подключайтесь!\n\nВопросы: @nocaponeNGG",
+    "referral_text": "👥 <b>Приглашай друзей и получай бонусы!</b>\n\n <b>Ты получаешь:</b> подписку на 3 дня за каждого друга\n <b>Друг получает:</b> бонус при первой покупке\n\n🔗 <b>Твоя ссылка:</b>\n<code>{referral_link}</code>\n\nНажми «Поделиться» чтобы отправить ссылку другу!",
+    "referral_bonus_days": 3,
+    "admin_id": 8753184165,
+    "mandatory_channels": [],
+    "referral_settings": {
+        "min_usage_days": 1,
+        "max_referrals_per_day": 5,
+        "require_first_purchase": false
+    },
+    "trial_days": 2
+}
