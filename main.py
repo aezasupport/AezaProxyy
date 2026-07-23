@@ -1,3 +1,22 @@
+import subprocess
+import sys
+
+def install_dependencies():
+    """Автоматическая установка зависимостей"""
+    required = ['aiogram', 'aiohttp', 'aiosqlite', 'python-dotenv']
+    missing = []
+    for package in required:
+        try:
+            __import__(package)
+        except ImportError:
+            missing.append(package)
+    
+    if missing:
+        print(f"📦 Устанавливаю недостающие библиотеки: {missing}")
+        subprocess.check_call([sys.executable, "-m", "pip", "install"] + missing)
+        print("✅ Зависимости установлены!")
+
+install_dependencies()
 import os
 import json
 import asyncio
@@ -15,9 +34,9 @@ from datetime import datetime, timedelta
 
 # ================= КОНФИГУРАЦИЯ ИЗ ПЕРЕМЕННЫХ ОКРУЖЕНИЯ =================
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-WG_PANEL_URL = os.getenv("WG_PANEL_URL", "http://89.222.113.215:51821")
-WG_PASSWORD = os.getenv("WG_PASSWORD", "admin1234")
-ADMIN_ID = int(os.getenv("ADMIN_ID", 8753184165))
+WG_PANEL_URL = os.getenv("WG_PANEL_URL", "http://89.222.104.215:51821")
+WG_PASSWORD = os.getenv("WG_PASSWORD", "admin1223")
+ADMIN_ID = int(os.getenv("ADMIN_ID", 875318224165))
 CONFIG_FILE = "bot_config.json"
 
 DEFAULT_CONFIG = {
@@ -889,13 +908,13 @@ async def cb_activate_promo(callback: CallbackQuery):
     except Exception as e:
         logging.error(f"Ошибка cb_activate_promo: {e}")
 
-# ИСПРАВЛЕНО: Добавлен параметр state: FSMContext
+# ИСПРАВЛЕНО: Правильная проверка FSM через параметр state
 @router.message(F.text & ~F.text.startswith('/'))
 async def process_promo_activation(message: Message, state: FSMContext):
-    # Проверяем не в состоянии ли FSM
+    # Проверяем не в FSM состоянии ли пользователь
     current_state = await state.get_state()
     if current_state:
-        return  # Пользователь в FSM состоянии, не обрабатываем
+        return  # Пользователь в FSM состоянии, пропускаем
     
     # Проверяем промокод
     promo_code = message.text.strip().upper()
