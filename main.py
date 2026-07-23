@@ -15,8 +15,8 @@ from datetime import datetime, timedelta
 
 # ================= КОНФИГУРАЦИЯ ИЗ ПЕРЕМЕННЫХ ОКРУЖЕНИЯ =================
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-WG_PANEL_URL = os.getenv("WG_PANEL_URL", "http://89.208.104.215:51821")
-WG_PASSWORD = os.getenv("WG_PASSWORD", "admin123")
+WG_PANEL_URL = os.getenv("WG_PANEL_URL", "http://89.222.113.215:51821")
+WG_PASSWORD = os.getenv("WG_PASSWORD", "admin1234")
 ADMIN_ID = int(os.getenv("ADMIN_ID", 8753184165))
 CONFIG_FILE = "bot_config.json"
 
