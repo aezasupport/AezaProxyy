@@ -1,6 +1,5 @@
 import subprocess
 import sys
-
 def install_dependencies():
     required = ['aiogram', 'aiohttp', 'aiosqlite', 'python-dotenv']
     missing = []
@@ -12,7 +11,6 @@ def install_dependencies():
     if missing:
         print(f"📦 Устанавливаю: {missing}")
         subprocess.check_call([sys.executable, "-m", "pip", "install"] + missing)
-
 install_dependencies()
 
 import os
@@ -27,7 +25,7 @@ from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, C
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.fsm.storage.sqlite import SqliteStorage  # ✅ ИСПРАВЛЕНО: SQLite вместо Memory
 from datetime import datetime, timedelta
 
 # ================= КОНФИГУРАЦИЯ =================
@@ -42,10 +40,10 @@ DEFAULT_CONFIG = {
         "3_months": {"name": "3 месяца", "stars": 400, "days": 90},
         "6_months": {"name": "6 месяцев", "stars": 700, "days": 180},
     },
-    "welcome_text": "🌐 <b>TRUST-VPN - анонимность превыше всего!</b>\n\n🔥 Наши преимущества:\n- Подписка до 5-ти устройств\n- Смена локаций\n- Высокая скорость\n- Отсутствует реклама\n- Поддержка Android, iOS, Windows, MacOS, AndroidTV, Linux\n\n📢 Подписывайтесь на наш канал!\n🎉 Получи пробную подписку VPN на 3 дня абсолютно бесплатно!",
+    "welcome_text": " <b>TRUST-VPN - анонимность превыше всего!</b>\n\n🔥 Наши преимущества:\n- Подписка до 5-ти устройств\n- Смена локаций\n- Высокая скорость\n- Отсутствует реклама\n- Поддержка Android, iOS, Windows, MacOS, AndroidTV, Linux\n\n 📢 Подписывайтесь на наш канал!\n🎉 Получи пробную подписку VPN на 3 дня абсолютно бесплатно!",
     "purchase_success_text": "✅ <b>Оплата прошла успешно!</b>\n\n Тариф '{tariff_name}' активирован\nДействует до: {expiry_date}\n\n📥 Скачайте конфигурацию ниже",
     "help_text": "📚 <b>Как пользоваться:</b>\n\n1. Выберите тариф в разделе 'Купить VPN'\n2. Оплатите подписку\n3. Скачайте файл конфигурации\n4. Установите приложение WireGuard\n5. Импортируйте файл в приложение\n6. Подключайтесь!\n\nВопросы: @nocaponeNGG",
-    "referral_text": "👥 <b>Приглашай друзей и получай бонусы!</b>\n\n <b>Ты получаешь:</b> {bonus} дней за каждого друга\n🎁 <b>Друг получает:</b> бонус при первой покупке\n\n<b>Твоя ссылка:</b>\n<code>{referral_link}</code>\n\nНажми «Поделиться» чтобы отправить ссылку другу!",
+    "referral_text": "👥 <b>Приглашай друзей и получай бонусы!</b>\n\n <b>Ты получаешь:</b> {bonus} дней за каждого друга\n🎁 <b>Друг получает:</b> бонус при первой покупке\n\n <b>Твоя ссылка:</b>\n<code>{referral_link}</code>\n\nНажми «Поделиться» чтобы отправить ссылку другу!",
     "referral_bonus_days": 3,
     "mandatory_channels": [],
     "trial_days": 3,
@@ -105,14 +103,15 @@ async def get_setting(key: str, default=None):
 async def set_setting(key: str, value):
     """Сохранить настройку в БД"""
     try:
+        logging.info(f"Попытка сохранить настройку {key}")
         async with aiosqlite.connect("bot.db") as db:
             await db.execute(
                 "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
                 (key, json.dumps(value) if isinstance(value, (dict, list)) else str(value))
             )
             await db.commit()
-        logging.info(f"✅ Настройка {key} сохранена в БД")
-        return True
+            logging.info(f"✅ Настройка {key} сохранена в БД")
+            return True
     except Exception as e:
         logging.error(f"❌ Ошибка set_setting: {e}")
         return False
@@ -136,10 +135,10 @@ async def update_tariff_db(key: str, **kwargs):
             for field, value in kwargs.items():
                 await db.execute(f"UPDATE tariffs SET {field} = ? WHERE key = ?", (value, key))
             await db.commit()
-        logging.info(f"✅ Тариф {key} обновлен: {kwargs}")
-        return True
+            logging.info(f"✅ Тариф {key} обновлен: {kwargs}")
+            return True
     except Exception as e:
-        logging.error(f"❌ Ошибка update_tariff_db: {e}")
+        logging.error(f" Ошибка update_tariff_db: {e}")
         return False
 
 async def get_mandatory_channels_db():
@@ -163,7 +162,7 @@ async def add_channel_db(chat_id: int, username: str):
                 (chat_id, username)
             )
             await db.commit()
-        return True
+            return True
     except Exception as e:
         logging.error(f"Ошибка add_channel_db: {e}")
         return False
@@ -174,7 +173,7 @@ async def remove_channel_db(chat_id: int):
         async with aiosqlite.connect("bot.db") as db:
             await db.execute("DELETE FROM mandatory_channels WHERE chat_id = ?", (chat_id,))
             await db.commit()
-        return True
+            return True
     except Exception as e:
         logging.error(f"Ошибка remove_channel_db: {e}")
         return False
@@ -316,23 +315,18 @@ async def create_user(tg_id: int, referred_by: int = None):
                 "INSERT INTO users (tg_id, referral_code, referred_by, referrals_count, balance) VALUES (?, ?, ?, 0, 0)",
                 (tg_id, referral_code, referred_by)
             )
-            
             if referred_by:
                 await db.execute("UPDATE users SET referrals_count = referrals_count + 1 WHERE tg_id = ?", (referred_by,))
                 bonus = await get_setting('referral_bonus_days', 3)
                 bonus = int(bonus)
-                
                 cursor = await db.execute("SELECT balance FROM users WHERE tg_id = ?", (referred_by,))
                 ref_result = await cursor.fetchone()
                 current_balance = int(ref_result['balance']) if ref_result else 0
                 new_balance = current_balance + bonus
-                
                 await db.execute("UPDATE users SET balance = ? WHERE tg_id = ?", (new_balance, referred_by))
                 logging.info(f"✅ Реферальный бонус: {bonus} дней пользователю {referred_by}")
-                
                 await db.commit()
                 return {'new_user': True, 'referred_by': referred_by, 'bonus': bonus, 'new_balance': new_balance}
-            
             await db.commit()
             return {'new_user': True}
     except Exception as e:
@@ -362,7 +356,7 @@ async def update_subscription(tg_id: int, client_name: str, client_id: str, days
                 (client_name, str(client_id), start, end, tg_id)
             )
             await db.commit()
-        logging.info(f"✅ Подписка обновлена для {tg_id}")
+            logging.info(f"✅ Подписка обновлена для {tg_id}")
     except Exception as e:
         logging.error(f"Ошибка update_subscription: {e}")
 
@@ -389,7 +383,6 @@ async def activate_promo_code(promo_code: str, user_id: int):
                 return {'success': False, 'message': '❌ Промокод не найден'}
             
             promo_dict = dict(promo)
-            
             if promo_dict['used_count'] >= promo_dict['max_uses']:
                 return {'success': False, 'message': '❌ Лимит использований'}
             
@@ -430,7 +423,6 @@ async def activate_promo_code(promo_code: str, user_id: int):
                 message += f"📅 Добавлено дней: {bonus_days}\n"
             if bonus_balance > 0:
                 message += f"💎 Начислено на баланс: {bonus_balance} дней\n"
-            
             return {'success': True, 'message': message}
     except Exception as e:
         logging.error(f"Ошибка activate_promo_code: {e}")
@@ -467,12 +459,12 @@ class WireGuardAPI:
         self.password = password
         self.cookies = {}
         self.session = None
-
+    
     async def _get_session(self):
         if self.session is None or self.session.closed:
             self.session = aiohttp.ClientSession()
         return self.session
-
+    
     async def login(self):
         session = await self._get_session()
         try:
@@ -486,7 +478,7 @@ class WireGuardAPI:
         except Exception as e:
             logging.error(f"WireGuard API error: {e}")
             return False
-
+    
     async def create_client(self, name: str):
         if not self.cookies:
             await self.login()
@@ -504,7 +496,7 @@ class WireGuardAPI:
         except Exception as e:
             logging.error(f"WireGuard create_client error: {e}")
             return None
-
+    
     async def get_config(self, client_id):
         if not self.cookies:
             await self.login()
@@ -545,7 +537,6 @@ async def require_subscription(event, bot: Bot, user_id: int) -> bool:
     kb.append([InlineKeyboardButton(text="✅ Я подписался", callback_data="check_sub")])
     
     text = "⚠️ <b>Для использования бота необходимо подписаться:</b>"
-    
     if isinstance(event, CallbackQuery):
         try:
             await event.message.edit_text(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
@@ -554,18 +545,16 @@ async def require_subscription(event, bot: Bot, user_id: int) -> bool:
         await event.answer()
     else:
         await event.answer(text, reply_markup=InlineKeyboardMarkup(inline_keyboard=kb), parse_mode="HTML")
-    
     return False
 
 # ================= КЛАВИАТУРЫ =================
 async def get_main_keyboard():
     support_username = await get_setting('support_username', 'nocaponeNGG')
     support_url = f"https://t.me/{support_username}" if not support_username.startswith('http') else support_username
-    
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🎉 Бесплатный тест VPN! ", callback_data="free_trial")],
+        [InlineKeyboardButton(text="🎉 Бесплатный тест VPN!", callback_data="free_trial")],
         [
-            InlineKeyboardButton(text="💼 Личный кабинет", callback_data="profile"),
+            InlineKeyboardButton(text=" Личный кабинет", callback_data="profile"),
             InlineKeyboardButton(text="🔐 Подключить VPN", callback_data="connect_vpn")
         ],
         [
@@ -573,13 +562,13 @@ async def get_main_keyboard():
             InlineKeyboardButton(text="🆘 Поддержка", url=support_url)
         ],
         [InlineKeyboardButton(text="🎁 Активировать промокод", callback_data="activate_promo")],
-        [InlineKeyboardButton(text="🚀 Купить VPN 🚀", callback_data="buy_vpn")]
+        [InlineKeyboardButton(text=" Купить VPN 🚀", callback_data="buy_vpn")]
     ])
 
 def get_admin_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="👥 Пользователи", callback_data="admin_users")],
-        [InlineKeyboardButton(text=" Рассылка", callback_data="admin_broadcast")],
+        [InlineKeyboardButton(text=" Пользователи", callback_data="admin_users")],
+        [InlineKeyboardButton(text="📢 Рассылка", callback_data="admin_broadcast")],
         [InlineKeyboardButton(text="📢 Обязательная подписка", callback_data="admin_channels")],
         [InlineKeyboardButton(text="⚙️ Настройки бота", callback_data="admin_settings")],
         [InlineKeyboardButton(text=" Статистика", callback_data="admin_stats")],
@@ -606,9 +595,9 @@ async def get_tariff_keyboard():
 
 def get_admin_settings_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="💰 Редактировать тарифы", callback_data="admin_edit_tariffs_menu")],
+        [InlineKeyboardButton(text=" Редактировать тарифы", callback_data="admin_edit_tariffs_menu")],
         [InlineKeyboardButton(text="📝 Текст приветствия", callback_data="admin_edit_welcome_text")],
-        [InlineKeyboardButton(text=" Текст покупки", callback_data="admin_edit_purchase_text")],
+        [InlineKeyboardButton(text="📝 Текст покупки", callback_data="admin_edit_purchase_text")],
         [InlineKeyboardButton(text="📝 Текст помощи", callback_data="admin_edit_help_text")],
         [InlineKeyboardButton(text="📝 Текст рефералки", callback_data="admin_edit_referral_text")],
         [InlineKeyboardButton(text="⭐ Реферальный бонус", callback_data="admin_edit_referral_bonus")],
@@ -623,7 +612,7 @@ async def get_edit_tariffs_keyboard():
         [InlineKeyboardButton(text=f"1 месяц: {tariffs['1_month']['stars']}⭐ / {tariffs['1_month']['days']}дн", callback_data="admin_edit_1month")],
         [InlineKeyboardButton(text=f"3 месяца: {tariffs['3_months']['stars']}⭐ / {tariffs['3_months']['days']}дн", callback_data="admin_edit_3months")],
         [InlineKeyboardButton(text=f"6 месяцев: {tariffs['6_months']['stars']}⭐ / {tariffs['6_months']['days']}дн", callback_data="admin_edit_6months")],
-        [InlineKeyboardButton(text="🔙 Назад", callback_data="admin_settings")]
+        [InlineKeyboardButton(text=" Назад", callback_data="admin_settings")]
     ])
 
 def get_edit_tariff_options_keyboard(tariff_key):
@@ -643,15 +632,15 @@ def get_profile_keyboard():
 def get_promo_menu_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="➕ Создать промокод", callback_data="admin_promo_create")],
-        [InlineKeyboardButton(text="📋 Список промокодов", callback_data="admin_promo_list")],
-        [InlineKeyboardButton(text=" Назад в админку", callback_data="admin_start")]
+        [InlineKeyboardButton(text=" Список промокодов", callback_data="admin_promo_list")],
+        [InlineKeyboardButton(text="🔙 Назад в админку", callback_data="admin_start")]
     ])
 
 # ================= ОБРАБОТЧИКИ =================
 @router.message(Command("start"))
 async def cmd_start(message: Message, bot: Bot):
     try:
-        logging.info(f" /start от {message.from_user.id}")
+        logging.info(f"/start от {message.from_user.id}")
         args = message.text.split()
         referral_code = args[1] if len(args) > 1 else None
         referred_by = None
@@ -662,7 +651,6 @@ async def cmd_start(message: Message, bot: Bot):
                 referred_by = referrer['tg_id']
         
         referral_info = await create_user(message.from_user.id, referred_by=referred_by)
-        
         if referral_info and referral_info.get('existing_user'):
             if referred_by:
                 referrer_user = await get_user(referred_by)
@@ -674,9 +662,7 @@ async def cmd_start(message: Message, bot: Bot):
             bonus = int(referral_info['bonus'])
             referrer_data = await get_user(referred_by)
             referrer_balance = int(referrer_data.get('balance', bonus)) if referrer_data else bonus
-            
             await message.answer(f"🎁 <b>Вам начислен бонус!</b>\n💰 Начислено: {bonus} дней\n💵 Баланс: {bonus} дней", parse_mode="HTML")
-            
             try:
                 username = f"@{message.from_user.username}" if message.from_user.username else f"ID:{message.from_user.id}"
                 await bot.send_message(referred_by, f"🎉 <b>Новый реферал!</b>\nПользователь {username} зарегистрировался!\n💰 Начислено: {bonus} дней\n💵 Баланс: {referrer_balance} дней", parse_mode="HTML")
@@ -687,7 +673,6 @@ async def cmd_start(message: Message, bot: Bot):
             return
         
         welcome_text = await get_setting('welcome_text', DEFAULT_CONFIG['welcome_text'])
-        
         if message.from_user.id == ADMIN_ID:
             await message.answer("Привет, Админ! \nДобро пожаловать в панель управления.", reply_markup=get_admin_keyboard())
         else:
@@ -744,8 +729,7 @@ async def cb_free_trial(callback: CallbackQuery):
             return
         
         trial_days = int(await get_setting('trial_days', 3))
-        
-        await callback.message.answer(f" <b>Бесплатный тест!</b>\nАктивирован доступ на {trial_days} дня!\n📥 Сейчас получите конфигурацию.", parse_mode="HTML")
+        await callback.message.answer(f"<b>Бесплатный тест!</b>\nАктивирован доступ на {trial_days} дня!\n📥 Сейчас получите конфигурацию.", parse_mode="HTML")
         
         try:
             user_chat = await callback.bot.get_chat(callback.from_user.id)
@@ -753,9 +737,9 @@ async def cb_free_trial(callback: CallbackQuery):
             client_name = f"trial_{username}" if username else f"trial_{callback.from_user.id}"
         except Exception:
             client_name = f"trial_{callback.from_user.id}"
-        client_name = f"{client_name}_{int(time.time())}"
         
-        logging.info(f" Создание тестового клиента {client_name}...")
+        client_name = f"{client_name}_{int(time.time())}"
+        logging.info(f"🔧 Создание тестового клиента {client_name}...")
         client_id = await wg_api.create_client(client_name)
         
         if client_id:
@@ -807,7 +791,6 @@ async def cb_profile(callback: CallbackQuery):
             status_text = "🔴 Не активен"
         
         devices_count = 1 if wg_client_id else 0
-        
         profile_text = (
             f"💼 <b>Личный кабинет</b>\n\n"
             f"├ VPN статус: {status_text}\n"
@@ -816,7 +799,6 @@ async def cb_profile(callback: CallbackQuery):
             f"└ Приглашено друзей: {referrals_count} чел.\n\n"
             f"💎 Ваш баланс: {balance} дней"
         )
-        
         await callback.message.answer(profile_text, parse_mode="HTML", reply_markup=get_profile_keyboard())
         await callback.answer()
     except Exception as e:
@@ -844,8 +826,7 @@ async def cb_connect_vpn(callback: CallbackQuery):
         file_name = f"wg_{user['tg_id']}.conf"
         with open(file_name, "w", encoding="utf-8") as f:
             f.write(config_text)
-        
-        await callback.message.answer_document(FSInputFile(file_name, filename=file_name), caption=" <b>Ваша конфигурация VPN</b>", parse_mode="HTML")
+        await callback.message.answer_document(FSInputFile(file_name, filename=file_name), caption="<b>Ваша конфигурация VPN</b>", parse_mode="HTML")
         os.remove(file_name)
         await callback.answer()
     except Exception as e:
@@ -857,7 +838,7 @@ async def cb_activate_promo(callback: CallbackQuery):
     try:
         if not await require_subscription(callback, callback.bot, callback.from_user.id):
             return
-        await callback.message.answer("🎁 <b>Активировать промокод</b>\n\nОтправьте промокод:\n\n/cancel для отмены", parse_mode="HTML")
+        await callback.message.answer(" <b>Активировать промокод</b>\n\nОтправьте промокод:\n\n/cancel для отмены", parse_mode="HTML")
         await callback.answer()
     except Exception as e:
         logging.error(f"Ошибка cb_activate_promo: {e}")
@@ -880,7 +861,7 @@ async def cb_history(callback: CallbackQuery):
     try:
         if not await require_subscription(callback, callback.bot, callback.from_user.id):
             return
-        await callback.message.answer("📜 <b>История</b>\nВ разработке...", parse_mode="HTML", reply_markup=get_profile_keyboard())
+        await callback.message.answer(" <b>История</b>\nВ разработке...", parse_mode="HTML", reply_markup=get_profile_keyboard())
         await callback.answer()
     except Exception as e:
         logging.error(f"Ошибка cb_history: {e}")
@@ -900,18 +881,15 @@ async def cb_referral(callback: CallbackQuery):
         user = await get_user(callback.from_user.id)
         balance = int(user.get('balance', 0)) if user else 0
         referrals_count = user.get('referrals_count', 0) if user else 0
-        
         bonus = int(await get_setting('referral_bonus_days', 3))
-        
         bot_info = await callback.bot.get_me()
         referral_link = f"https://t.me/{bot_info.username}?start={referral_code}"
         
         referral_text = await get_setting('referral_text', DEFAULT_CONFIG['referral_text'])
         referral_text = referral_text.format(bonus=bonus, referral_link=referral_link)
         
-        stats_text = f"👥 <b>Ваша статистика:</b>\n\n💎 Баланс: {balance} дней\n👥 Приглашено: {referrals_count}\n💰 За друга: {bonus} дней\n\n"
-        
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="📤 Поделиться!", url=f"https://t.me/share/url?url={referral_link}&text=Приглашаю в VPN бот!")]])
+        stats_text = f"👥 <b>Ваша статистика:</b>\n\n Баланс: {balance} дней\n👥 Приглашено: {referrals_count}\n💰 За друга: {bonus} дней\n\n"
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=" Поделиться!", url=f"https://t.me/share/url?url={referral_link}&text=Приглашаю в VPN бот!")]])
         
         await callback.message.answer(stats_text + referral_text, parse_mode="HTML", reply_markup=keyboard)
         await callback.answer()
@@ -924,7 +902,7 @@ async def cb_buy_vpn(callback: CallbackQuery):
     try:
         if not await require_subscription(callback, callback.bot, callback.from_user.id):
             return
-        text = " <b>Купить VPN подписку</b>\n\nВыберите тариф:"
+        text = "<b>Купить VPN подписку</b>\n\nВыберите тариф:"
         await callback.message.edit_text(text, parse_mode="HTML", reply_markup=await get_tariff_keyboard())
         await callback.answer()
     except Exception as e:
@@ -945,7 +923,7 @@ async def cb_admin_promo_create(callback: CallbackQuery, state: FSMContext):
     if callback.from_user.id != ADMIN_ID:
         await callback.answer("Доступ запрещен", show_alert=True)
         return
-    await callback.message.answer("🎟️ <b>Создание промокода</b>\n\nОтправьте код (латиница, цифры):\n\n/cancel для отмены", parse_mode="HTML")
+    await callback.message.answer("️ <b>Создание промокода</b>\n\nОтправьте код (латиница, цифры):\n\n/cancel для отмены", parse_mode="HTML")
     await state.set_state(AdminEditStates.creating_promo)
     await callback.answer()
 
@@ -983,7 +961,7 @@ async def process_promo_balance(message: Message, state: FSMContext):
     try:
         balance = int(message.text)
         if balance < 0:
-            await message.answer(" Не может быть отрицательным!")
+            await message.answer("❌ Не может быть отрицательным!")
             return
         await state.update_data(bonus_balance=balance)
         await message.answer("🔢 Макс. использований (1 = одноразовый):\n\n/cancel для отмены")
@@ -1006,7 +984,7 @@ async def process_promo_uses(message: Message, state: FSMContext):
         balance = data.get('bonus_balance', 0)
         
         if await create_promo_code(code, days, balance, max_uses, message.from_user.id):
-            await message.answer(f"✅ <b>Промокод создан!</b>\n\n🎟️ Код: <code>{code}</code>\n📅 Дней подписки: {days}\n💎 Дней на баланс: {balance}\n🔢 Макс. использований: {max_uses}", parse_mode="HTML", reply_markup=get_promo_menu_keyboard())
+            await message.answer(f"✅ <b>Промокод создан!</b>\n\n️ Код: <code>{code}</code>\n📅 Дней подписки: {days}\n💎 Дней на баланс: {balance}\n🔢 Макс. использований: {max_uses}", parse_mode="HTML", reply_markup=get_promo_menu_keyboard())
         else:
             await message.answer("❌ Ошибка!")
         await state.clear()
@@ -1026,6 +1004,7 @@ async def cb_admin_promo_list(callback: CallbackQuery):
         for promo in promos[:10]:
             status = "✅" if promo['is_active'] else "❌"
             text += f"{status} <code>{promo['code']}</code>\n   📅 {promo['bonus_days']}дн | 💎 {promo['bonus_balance']}дн | Использовано: {promo['used_count']}/{promo['max_uses']}\n\n"
+    
     keyboard = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="➕ Создать", callback_data="admin_promo_create")], [InlineKeyboardButton(text="🔙 Назад", callback_data="admin_promo")]])
     await callback.message.answer(text, parse_mode="HTML", reply_markup=keyboard)
     await callback.answer()
@@ -1084,7 +1063,7 @@ async def cb_admin_channels(callback: CallbackQuery):
     if not channels:
         text = "📢 <b>Обязательная подписка</b>\n\nКаналы не добавлены."
     else:
-        text = f"📢 <b>Обязательная подписка</b>\n\nКаналов: {len(channels)}"
+        text = f" <b>Обязательная подписка</b>\n\nКаналов: {len(channels)}"
     await callback.message.edit_text(text, reply_markup=await get_admin_channels_keyboard(), parse_mode="HTML")
     await callback.answer()
 
@@ -1100,7 +1079,7 @@ async def cb_admin_ch_remove(callback: CallbackQuery):
 async def cb_admin_ch_add(callback: CallbackQuery, state: FSMContext):
     if callback.from_user.id != ADMIN_ID:
         return
-    await callback.message.answer(" <b>Добавление канала</b>\n\nОтправьте username (например: @durov) или ссылку.\n⚠️ Бот должен быть АДМИНИСТРАТОРОМ!\n\n/cancel для отмены", parse_mode="HTML")
+    await callback.message.answer("<b>Добавление канала</b>\n\nОтправьте username (например: @durov) или ссылку.\n⚠️ Бот должен быть АДМИНИСТРАТОРОМ!\n\n/cancel для отмены", parse_mode="HTML")
     await state.set_state(AdminChannelStates.waiting_channel)
     await callback.answer()
 
@@ -1112,6 +1091,7 @@ async def process_channel_add(message: Message, state: FSMContext):
         await state.clear()
         await message.answer("❌ Отменено", reply_markup=get_admin_keyboard())
         return
+    
     username = message.text.strip()
     if not username.startswith('@') and not username.startswith('http'):
         username = '@' + username
@@ -1119,6 +1099,7 @@ async def process_channel_add(message: Message, state: FSMContext):
         username = username.split('/')[-1]
         if not username.startswith('@'):
             username = '@' + username
+    
     try:
         chat = await message.bot.get_chat(username)
         await add_channel_db(chat.id, username)
@@ -1135,7 +1116,7 @@ async def cb_admin_edit_referral_text(callback: CallbackQuery, state: FSMContext
             await callback.answer("Доступ запрещен", show_alert=True)
             return
         current_text = await get_setting('referral_text', DEFAULT_CONFIG['referral_text'])
-        await callback.message.answer(f" <b>Текущий текст:</b>\n\n{current_text}\n\nОтправьте новый (HTML, используйте {{bonus}} и {{referral_link}})\n\n/cancel для отмены", parse_mode="HTML")
+        await callback.message.answer(f"<b>Текущий текст:</b>\n\n{current_text}\n\nОтправьте новый (HTML, используйте {{bonus}} и {{referral_link}})\n\n/cancel для отмены", parse_mode="HTML")
         await state.set_state(AdminEditStates.editing_referral_text)
         await callback.answer()
     except Exception as e:
@@ -1183,6 +1164,7 @@ async def cb_admin_stats(callback: CallbackQuery):
         if callback.from_user.id != ADMIN_ID:
             await callback.answer("Доступ запрещен", show_alert=True)
             return
+        
         users = await get_all_users()
         total_users = len(users)
         active_count = sum(1 for u in users if u.get('is_active'))
@@ -1190,7 +1172,7 @@ async def cb_admin_stats(callback: CallbackQuery):
         total_balance = sum(int(u.get('balance', 0)) for u in users)
         tariffs = await get_all_tariffs()
         
-        text = f"📊 <b>Статистика бота</b>\n\n👥 <b>Пользователи:</b>\n   Всего: {total_users}\n   Активных: {active_count}\n\n👥 <b>Рефералы:</b>\n   Всего приглашений: {total_referrals}\n\n💰 <b>Балансы:</b>\n   Всего выдано: {total_balance} дней\n\n💰 <b>Тарифы:</b>\n"
+        text = f"📊 <b>Статистика бота</b>\n\n👥 <b>Пользователи:</b>\n   Всего: {total_users}\n   Активных: {active_count}\n\n👥 <b>Рефералы:</b>\n   Всего приглашений: {total_referrals}\n\n <b>Балансы:</b>\n   Всего выдано: {total_balance} дней\n\n💰 <b>Тарифы:</b>\n"
         for key, tariff in tariffs.items():
             text += f"   {tariff['name']}: {tariff['stars']}⭐ / {tariff['days']}дн\n"
         
@@ -1244,7 +1226,7 @@ async def cb_admin_edit_purchase(callback: CallbackQuery, state: FSMContext):
             await callback.answer("Доступ запрещен", show_alert=True)
             return
         current_text = await get_setting('purchase_success_text', DEFAULT_CONFIG['purchase_success_text'])
-        await callback.message.answer(f" <b>Текущий текст:</b>\n\n{current_text}\n\nОтправьте новый (HTML, {{tariff_name}} и {{expiry_date}})\n\n/cancel для отмены", parse_mode="HTML")
+        await callback.message.answer(f"<b>Текущий текст:</b>\n\n{current_text}\n\nОтправьте новый (HTML, {{tariff_name}} и {{expiry_date}})\n\n/cancel для отмены", parse_mode="HTML")
         await state.set_state(AdminEditStates.editing_purchase_text)
         await callback.answer()
     except Exception as e:
@@ -1284,7 +1266,7 @@ async def cb_admin_change_days(callback: CallbackQuery, state: FSMContext):
             return
         tariff_key = callback.data.replace("admin_change_days_", "")
         await state.set_state(getattr(AdminEditStates, f'editing_days_{tariff_key}', AdminEditStates.editing_days_1month))
-        await callback.message.answer("📅 Введите количество дней:")
+        await callback.message.answer(" Введите количество дней:")
         await callback.answer()
     except Exception as e:
         logging.error(f"Ошибка cb_admin_change_days: {e}")
@@ -1293,24 +1275,40 @@ async def cb_admin_change_days(callback: CallbackQuery, state: FSMContext):
 async def process_edit_welcome(message: Message, state: FSMContext):
     if message.from_user.id != ADMIN_ID:
         return
-    await set_setting('welcome_text', message.text)
-    await message.answer("✅ Текст приветствия обновлен!", reply_markup=get_admin_settings_keyboard())
+    logging.info(f"Редактирование welcome_text от пользователя {message.from_user.id}")
+    success = await set_setting('welcome_text', message.text)
+    if success:
+        await message.answer("✅ Текст приветствия обновлен!", reply_markup=get_admin_settings_keyboard())
+        logging.info("✅ Текст приветствия успешно сохранен")
+    else:
+        await message.answer("❌ Ошибка при сохранении в БД")
+        logging.error("❌ Ошибка при сохранении текста приветствия")
     await state.clear()
 
 @router.message(AdminEditStates.editing_purchase_text, F.text)
 async def process_edit_purchase(message: Message, state: FSMContext):
     if message.from_user.id != ADMIN_ID:
         return
-    await set_setting('purchase_success_text', message.text)
-    await message.answer("✅ Текст покупки обновлен!", reply_markup=get_admin_settings_keyboard())
+    logging.info(f"Редактирование purchase_text от пользователя {message.from_user.id}")
+    success = await set_setting('purchase_success_text', message.text)
+    if success:
+        await message.answer("✅ Текст покупки обновлен!", reply_markup=get_admin_settings_keyboard())
+        logging.info("✅ Текст покупки успешно сохранен")
+    else:
+        await message.answer("❌ Ошибка при сохранении в БД")
     await state.clear()
 
 @router.message(AdminEditStates.editing_help_text, F.text)
 async def process_edit_help(message: Message, state: FSMContext):
     if message.from_user.id != ADMIN_ID:
         return
-    await set_setting('help_text', message.text)
-    await message.answer("✅ Текст помощи обновлен!", reply_markup=get_admin_settings_keyboard())
+    logging.info(f"Редактирование help_text от пользователя {message.from_user.id}")
+    success = await set_setting('help_text', message.text)
+    if success:
+        await message.answer("✅ Текст помощи обновлен!", reply_markup=get_admin_settings_keyboard())
+        logging.info("✅ Текст помощи успешно сохранен")
+    else:
+        await message.answer("❌ Ошибка при сохранении в БД")
     await state.clear()
 
 @router.message(AdminEditStates.editing_price_1month, F.text)
@@ -1335,7 +1333,7 @@ async def process_edit_price_3months(message: Message, state: FSMContext):
         await message.answer(f"✅ Цена для 3 месяцев: {new_price}⭐", reply_markup=await get_edit_tariffs_keyboard())
         await state.clear()
     except ValueError:
-        await message.answer(" Введите число!")
+        await message.answer("❌ Введите число!")
 
 @router.message(AdminEditStates.editing_price_6months, F.text)
 async def process_edit_price_6months(message: Message, state: FSMContext):
@@ -1347,7 +1345,7 @@ async def process_edit_price_6months(message: Message, state: FSMContext):
         await message.answer(f"✅ Цена для 6 месяцев: {new_price}⭐", reply_markup=await get_edit_tariffs_keyboard())
         await state.clear()
     except ValueError:
-        await message.answer(" Введите число!")
+        await message.answer("❌ Введите число!")
 
 @router.message(AdminEditStates.editing_days_1month, F.text)
 async def process_edit_days_1month(message: Message, state: FSMContext):
@@ -1396,8 +1394,7 @@ async def cb_tariff_selected(callback: CallbackQuery, state: FSMContext):
         
         await state.set_state(PurchaseStates.selecting_tariff)
         await state.update_data(tariff_key=tariff_key, stars=tariff['stars'], days=tariff['days'], name=tariff['name'])
-        
-        await callback.message.answer(f"<b>Покупка тарифа '{tariff['name']}'</b>\n\n💰 Стоимость: {tariff['stars']} ⭐\n📅 Срок: {tariff['days']} дней\n\nДля подтверждения нажмите кнопку", reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=f"💳 Оплатить {tariff['stars']} ⭐", callback_data=f"pay_{tariff_key}")], [InlineKeyboardButton(text="🔙 Отмена", callback_data="buy_vpn")]]), parse_mode="HTML")
+        await callback.message.answer(f"<b>Покупка тарифа '{tariff['name']}'</b>\n\n Стоимость: {tariff['stars']} \n📅 Срок: {tariff['days']} дней\n\nДля подтверждения нажмите кнопку", reply_markup=InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=f"💳 Оплатить {tariff['stars']} ⭐", callback_data=f"pay_{tariff_key}")], [InlineKeyboardButton(text="🔙 Отмена", callback_data="buy_vpn")]]), parse_mode="HTML")
         await callback.answer()
     except Exception as e:
         logging.error(f"Ошибка cb_tariff_selected: {e}")
@@ -1411,10 +1408,22 @@ async def cb_pay(callback: CallbackQuery, state: FSMContext):
         if not tariff_key:
             await callback.answer("Сессия истекла.", show_alert=True)
             return
+        
         tariffs = await get_all_tariffs()
         tariff = tariffs[tariff_key]
-        
-        await callback.bot.send_invoice(chat_id=callback.from_user.id, title=f"VPN Подписка - {tariff['name']}", description=f"Оплата подписки WireGuard VPN на {tariff['days']} дней", payload=f"wg_{tariff_key}_{callback.from_user.id}_{int(time.time())}", provider_token="", currency="XTR", prices=[LabeledPrice(label=tariff['name'], amount=tariff['stars'])], need_name=False, need_phone_number=False, need_email=False, need_shipping_address=False)
+        await callback.bot.send_invoice(
+            chat_id=callback.from_user.id,
+            title=f"VPN Подписка - {tariff['name']}",
+            description=f"Оплата подписки WireGuard VPN на {tariff['days']} дней",
+            payload=f"wg_{tariff_key}_{callback.from_user.id}_{int(time.time())}",
+            provider_token="",
+            currency="XTR",
+            prices=[LabeledPrice(label=tariff['name'], amount=tariff['stars'])],
+            need_name=False,
+            need_phone_number=False,
+            need_email=False,
+            need_shipping_address=False
+        )
         await callback.answer()
     except Exception as e:
         logging.error(f"Ошибка cb_pay: {e}")
@@ -1441,7 +1450,6 @@ async def process_successful_payment(message: Message, state: FSMContext):
             user_id = int(parts[2])
             tariffs = await get_all_tariffs()
             tariff = tariffs[tariff_key]
-            
             logging.info(f"💰 Успешная оплата от {user_id}: {tariff['name']}, {tariff['stars']}⭐")
             
             try:
@@ -1450,16 +1458,15 @@ async def process_successful_payment(message: Message, state: FSMContext):
                 client_name = f"{username}" if username else f"tg{user_id}"
             except Exception:
                 client_name = f"tg{user_id}"
-            client_name = f"{client_name}_{int(time.time())}"
             
-            logging.info(f"🔧 Создание клиента {client_name}...")
+            client_name = f"{client_name}_{int(time.time())}"
+            logging.info(f" Создание клиента {client_name}...")
             client_id = await wg_api.create_client(client_name)
             
             if client_id:
                 config_text = await wg_api.get_config(client_id)
                 if config_text:
                     await update_subscription(user_id, client_name, client_id, tariff['days'])
-                    
                     file_name = f"wg_{user_id}.conf"
                     with open(file_name, "w", encoding="utf-8") as f:
                         f.write(config_text)
@@ -1467,11 +1474,9 @@ async def process_successful_payment(message: Message, state: FSMContext):
                     expiry_date = (datetime.now() + timedelta(days=tariff['days'])).strftime('%d.%m.%Y')
                     purchase_text = await get_setting('purchase_success_text', DEFAULT_CONFIG['purchase_success_text'])
                     purchase_text = purchase_text.format(tariff_name=tariff['name'], expiry_date=expiry_date)
-                    
                     await message.answer(purchase_text, parse_mode="HTML")
                     await message.answer_document(FSInputFile(file_name, filename=file_name))
                     os.remove(file_name)
-                    
                     await state.clear()
                     logging.info(f"✅ Конфигурация отправлена {user_id}")
             else:
@@ -1485,6 +1490,7 @@ async def cb_my_subscription(callback: CallbackQuery):
     try:
         if not await require_subscription(callback, callback.bot, callback.from_user.id):
             return
+        
         user = await get_user(callback.from_user.id)
         if not user:
             await callback.message.answer("📭 <b>Нет активной подписки</b>", reply_markup=await get_main_keyboard(), parse_mode="HTML")
@@ -1493,7 +1499,6 @@ async def cb_my_subscription(callback: CallbackQuery):
         
         is_active = user.get('is_active', 0)
         wg_client_id = user.get('wg_client_id')
-        
         if not is_active or not wg_client_id:
             await callback.message.answer("📭 <b>Нет активной подписки</b>", reply_markup=await get_main_keyboard(), parse_mode="HTML")
             await callback.answer()
@@ -1501,7 +1506,6 @@ async def cb_my_subscription(callback: CallbackQuery):
         
         end_date = datetime.strptime(user['subscription_end'], "%Y-%m-%d %H:%M:%S")
         remaining = end_date - datetime.now()
-        
         if remaining.total_seconds() <= 0:
             await callback.message.answer("⚠️ <b>Подписка истекла!</b>", reply_markup=await get_main_keyboard(), parse_mode="HTML")
             await callback.answer()
@@ -1509,7 +1513,7 @@ async def cb_my_subscription(callback: CallbackQuery):
         
         config_text = await wg_api.get_config(wg_client_id)
         if not config_text:
-            await callback.message.answer("❌ Не удалось получить конфигурацию.")
+            await callback.message.answer(" Не удалось получить конфигурацию.")
             await callback.answer()
             return
         
@@ -1519,10 +1523,8 @@ async def cb_my_subscription(callback: CallbackQuery):
         
         days = remaining.days
         hours = remaining.seconds // 3600
-        
         keyboard = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="📱 Перенести ключи", callback_data=f"share_config_{wg_client_id}")], [InlineKeyboardButton(text="🔙 Назад", callback_data="main_menu")]])
-        
-        await callback.message.answer(f"📱 <b>Ваша подписка</b>\n\n✅ Статус: Активна\n📅 Осталось: {days} дн. {hours} ч.\n Истекает: {end_date.strftime('%d.%m.%Y %H:%M')}\n\n📥 Ваша конфигурация:", parse_mode="HTML", reply_markup=keyboard)
+        await callback.message.answer(f"📱 <b>Ваша подписка</b>\n\n✅ Статус: Активна\n📅 Осталось: {days} дн. {hours} ч.\n🕐 Истекает: {end_date.strftime('%d.%m.%Y %H:%M')}\n\n📥 Ваша конфигурация:", parse_mode="HTML", reply_markup=keyboard)
         await callback.message.answer_document(FSInputFile(file_name, filename=file_name))
         os.remove(file_name)
         await callback.answer()
@@ -1549,9 +1551,8 @@ async def cb_share_config(callback: CallbackQuery):
         with open(file_name, "w", encoding="utf-8") as f:
             f.write(config_text)
         
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text=" Назад", callback_data="my_subscription")]])
-        
-        await callback.message.answer_document(FSInputFile(file_name, filename=file_name), caption=" Отправьте в приложение WireGuard", reply_markup=keyboard)
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔙 Назад", callback_data="my_subscription")]])
+        await callback.message.answer_document(FSInputFile(file_name, filename=file_name), caption="📤 Отправьте в приложение WireGuard", reply_markup=keyboard)
         os.remove(file_name)
         await callback.answer()
     except Exception as e:
@@ -1582,8 +1583,9 @@ async def cb_admin_users(callback: CallbackQuery):
         if callback.from_user.id != ADMIN_ID:
             await callback.answer("Доступ запрещен", show_alert=True)
             return
+        
         users = await get_all_users()
-        text = f" <b>Всего пользователей: {len(users)}</b>\n\n"
+        text = f"<b>Всего пользователей: {len(users)}</b>\n\n"
         
         for user in users:
             status = "✅" if user.get('is_active') else "❌"
@@ -1603,7 +1605,6 @@ async def cb_admin_users(callback: CallbackQuery):
             text += f"{status} <b>{full_name}</b> {username}\n   ID: <code>{user['tg_id']}</code>\n   WG: {name} | До: {end}\n   Рефералы: {referrals} | Баланс: {balance} дней\n\n"
         
         keyboard = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="🔙 Назад", callback_data="admin_start")]])
-        
         await callback.message.answer(text, parse_mode="HTML", reply_markup=keyboard)
         await callback.answer()
     except Exception as e:
@@ -1644,17 +1645,23 @@ async def cmd_cancel(message: Message, state: FSMContext):
 
 # ================= ЗАПУСК =================
 async def main():
+    logging.info("Запуск бота...")
+    logging.info(f"Текущая директория: {os.getcwd()}")
+    logging.info(f"Права на запись bot.db: {os.access('bot.db', os.W_OK)}")
+    
     await init_db()
     login_success = await wg_api.login()
     if login_success:
         logging.info("✅ Подключение к WireGuard успешно")
     
-    storage = MemoryStorage()
+    # ✅ ИСПРАВЛЕНО: Используем SQLiteStorage вместо MemoryStorage
+    storage = SqliteStorage("fsm_states.db")
+    
     bot = Bot(token=BOT_TOKEN)
     dp = Dispatcher(storage=storage)
     dp.include_router(router)
     
-    logging.info(" Бот запущен...")
+    logging.info("🚀 Бот запущен...")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
